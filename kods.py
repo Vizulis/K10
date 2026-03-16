@@ -13,13 +13,12 @@ class Node:
     move [int]   Gājiens, kas tika veikts, lai tiktu pie šīs virsotnes
     '''
 
-    def __init__(self, id, sequence, p1, p2, depth, move):
+    def __init__(self, id, sequence, p1, p2, depth):
         self.id = id
         self.sequence = sequence.copy()
         self.p1 = p1
         self.p2 = p2
         self.depth = depth
-        self.move = move
 
     def __str__(self):
         # Pamainīju __str__, lai būtu labāk salasāms, kad tiek printēts
@@ -36,10 +35,7 @@ class Node:
         # Jābūt izvēlei, kurš sāk pirmais(dators vai cilvēks),
         # tāpēc vērtība, kuru atgriezīs funckija ir atkarīga no tā, kurš sāka
 
-        if maximizing:
-            return self.p1 - self.p2
-        else:
-            return self.p2 - self.p1
+        return self.p1 - self.p2
     
                      
 class GameTree:
@@ -53,7 +49,7 @@ class GameTree:
         self.node_count = 2
         self.node_dict = {}
     
-    def add_node(self, node, parent = None):
+    def add_node(self, node, parent=None, move=None):
         key = node.key()
 
         if key not in self.node_dict:
@@ -61,7 +57,7 @@ class GameTree:
             self.node_dict[key] = node
 
             if parent is not None:
-                self.add_edge(parent, node)
+                self.add_edge(parent, move, node)
 
             self.node_count += 1
             return node
@@ -69,12 +65,12 @@ class GameTree:
             existing_node = self.node_dict[key]
 
             if parent is not None:
-                self.add_edge(parent, existing_node)
+                self.add_edge(parent, move, existing_node)
 
             return existing_node
     
-    def add_edge(self, parent, child):
-        self.edge_set.setdefault(parent, []).append(child)
+    def add_edge(self, parent, move, child):
+        self.edge_set.setdefault(parent, []).append((move, child))
 
     def generate_children(self, node, player):
         # gajiena_parbaude() ar citu nosaukumu
@@ -96,109 +92,106 @@ class GameTree:
                     new_sequence,
                     p1_new,
                     p2_new,
-                    node.depth + 1,
-                    move
+                    node.depth + 1
                 )
 
-                added_node = self.add_node(new_node, node)
-                children.append(added_node)
+                added_node = self.add_node(new_node, node, move)
+                children.append((move, added_node))
 
         return children
 
 def minimax(tree, node, maximizing, depth):
-    # Pievienoju dziļumu(depth) pēc prakstiskā darba vajadzībām
-    # Tas rekursīvi tiek samazināts līdz 0, tad beidz darbību
     children = tree.edge_set.get(node, [])
-    
+
     if not children or depth == 0:
         return node.heuristic_value(maximizing)
-    
+
     if maximizing:
         best = -float('inf')
-        for child in children:
+        for move, child in children:
             best = max(best, minimax(tree, child, False, depth - 1))
     else:
         best = float('inf')
-        for child in children:
+        for move, child in children:
             best = min(best, minimax(tree, child, True, depth - 1))
 
     return best
     
-def alpha_beta(tree, node, maximizing, depth, alpha = -float('inf'), beta = float('inf')):
-    # Gandrīz identisks minimax algoritmam, pie tā pievienoti ir alpha un beta parametri
-    # alpha ir labākais, ko maksimizētājs var garantēt, beta ir labākais, ko minimizētājs var garantēt
-    # Ja alpha jebkurā gadījumā ir lielāks par beta, tad veic nogriešanu(virsotni izlaiž, tādējādi netiek skatīti virsotnes bērni)
+def alpha_beta(tree, node, maximizing, depth, alpha=-float('inf'), beta=float('inf')):
     children = tree.edge_set.get(node, [])
 
     if not children or depth == 0:
         return node.heuristic_value(maximizing)
-    
+
     if maximizing:
         best = -float('inf')
-        for child in children:
+        for move, child in children:
             value = alpha_beta(tree, child, False, depth - 1, alpha, beta)
-            best = max(value, best)
+            best = max(best, value)
             alpha = max(alpha, best)
 
-            if beta <= alpha:
+            if alpha >= beta:
                 break
     else:
         best = float('inf')
-        for child in children:
+        for move, child in children:
             value = alpha_beta(tree, child, True, depth - 1, alpha, beta)
-            best = min(value, best)
+            best = min(best, value)
             beta = min(beta, best)
 
-            if beta <= alpha:
+            if alpha >= beta:
                 break
 
     return best
 
 def best_move(tree, node, player, depth, algorithm):
-    # Jauns arguments: algorithm
-    # Tas norāda, vai izmanto minimax vai alpha-beta algoritmu
-    best_score = -float('inf')
-    best_child = None
-    
     children = tree.edge_set.get(node, [])
-    children.sort(key = lambda x: x.move)
-    
-    for child in children:
-        if player == 1:
+    children.sort(key=lambda x: x[0])  # sort pēc move
+
+    best_child = None
+
+    if player == 1:
+        best_score = -float('inf')
+        for move, child in children:
             if algorithm == "minimax":
                 value = minimax(tree, child, False, depth - 1)
             else:
                 value = alpha_beta(tree, child, False, depth - 1)
-        else:
+
+            if value > best_score:
+                best_score = value
+                best_child = (move, child)
+    else:
+        best_score = float('inf')
+        for move, child in children:
             if algorithm == "minimax":
                 value = minimax(tree, child, True, depth - 1)
             else:
                 value = alpha_beta(tree, child, True, depth - 1)
-        
-        if value > best_score:
-            best_score = value
-            best_child = child
+
+            if value < best_score:
+                best_score = value
+                best_child = (move, child)
 
     return best_child
 
 
 def human_move(tree, node):
-    if not node.sequence:
+    children = tree.edge_set.get(node, [])
+
+    if not children:
         return None
 
-    legal_moves = sorted(set(node.sequence))
+    legal_moves = sorted(set(move for move, child in children))
     print("Legal moves:", legal_moves)
 
     while True:
         try:
             move = int(input("Enter your move: "))
             if move in legal_moves:
-                # Find the child node that corresponds to this move
-                children = tree.edge_set.get(node, [])
-                for child in children:
-                    if child.move == move:
-                        return child
-                print("Move not available, try again.")
+                for child_move, child in children:
+                    if child_move == move:
+                        return move, child
             else:
                 print("Invalid move.")
         except ValueError:
@@ -268,10 +261,9 @@ def build_tree(tree, root, first_player):
         else:
             player = 2 if first_player == 1 else 1
 
-        
         children = tree.generate_children(node, player)
-        
-        for child in children:
+
+        for move, child in children:
             if child.sequence:
                 queue.append(child)
 
@@ -281,28 +273,31 @@ def play_game(tree, mode, node, current_player, max_depth, algorithm):
     match mode:
         case 1:
             while node and node.sequence:
-                node = best_move(tree, node, current_player, max_depth, algorithm)
-                if node is None:
+                result = best_move(tree, node, current_player, max_depth, algorithm)
+                if result is None:
                     break
-                print(f"AI {current_player} made a move: removed {node.move} from the sequence")
+                move, node = result
+                print(f"AI {current_player} made a move: removed {move} from the sequence")
                 print(f"New sequence: {node}")
                 print("-------------------------------------------------------")
                 current_player = 2 if current_player == 1 else 1
         case 2:
             while node and node.sequence:
                 if current_player == 1:
-                    node = human_move(tree, node)
-                    if node is None:
+                    result = human_move(tree, node)
+                    if result is None:
                         break
-                    print(f"Human made a move: removed {node.move} from the sequence")
+                    move, node = result
+                    print(f"Human made a move: removed {move} from the sequence")
                     print(f"New sequence: {node}")
                     print("-------------------------------------------------------")
                     current_player = 2
                 else:
-                    node = best_move(tree, node, current_player, max_depth, algorithm)
-                    if node is None:
+                    result = best_move(tree, node, current_player, max_depth, algorithm)
+                    if result is None:
                         break
-                    print(f"AI made a move: removed {node.move} from the sequence")
+                    move, node = result
+                    print(f"AI made a move: removed {move} from the sequence")
                     print(f"New sequence: {node}")
                     print("-------------------------------------------------------")
                     current_player = 1
@@ -338,7 +333,7 @@ def main():
 
     # Izveido root virsotni un uzbūvē no tā visu pārējo koku
     tree = GameTree()
-    root = Node('A1', sequence, 80, 80, 1, None)
+    root = Node('A1', sequence, 80, 80, 1)
     tree.add_node(root)
 
     build_tree(tree, root, first_player)
