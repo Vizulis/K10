@@ -364,7 +364,7 @@ class GameApp: # jauna klase grafiskajam interfeisam
         # Spēles inicializācija 
         sequence = [randint(1, 5) for _ in range(sequence_length)] 
         self.tree = GameTree()  
-        self.current_node = Node('A1', sequence, 150, 150, 1)  
+        self.current_node = Node('A1', sequence, 250, 250, 1)  
         self.tree.add_node(self.current_node) 
         self.game_running = True  
         self.update_ui() 
