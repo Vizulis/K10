@@ -385,7 +385,7 @@ def main():
         algorithm = get_algorithm()
 
         tree = GameTree()
-        root = Node('A1', sequence, 150, 150, 1)
+        root = Node('A1', sequence, 250, 250, 1)
         tree.add_node(root)
 
         play_game(tree, mode, root, first_player, MAX_SEARCH_DEPTH, algorithm)
